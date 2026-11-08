@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Wordhoard Editor</title>
+<style>
+:root{--bg:#f4eedf;--card:#faf6ea;--ink:#38362f;--muted:#6f6b5d;--line:#ddd3bb;--acc:#4f7461;--accink:#fbf8ee;--soft:#e4e8d9;--good:#dbe6d3;--bad:#efd9d0;--serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;--sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+:root[data-theme=dark]{--bg:#212421;--card:#2a2e2a;--ink:#e7e2d3;--muted:#a09d8d;--line:#3b413b;--acc:#93b49e;--accink:#1d201d;--soft:#343a34;--good:#34493a;--bad:#4d3a35}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#212421;--card:#2a2e2a;--ink:#e7e2d3;--muted:#a09d8d;--line:#3b413b;--acc:#93b49e;--accink:#1d201d;--soft:#343a34;--good:#34493a;--bad:#4d3a35}}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.45}
+body{padding:env(safe-area-inset-top) 0 calc(72px + env(safe-area-inset-bottom))}
+header{display:flex;gap:8px;align-items:center;padding:12px 16px;max-width:620px;margin:0 auto}
+header h1{font:600 1.35rem var(--serif);margin:0;flex:1}
+main{max-width:620px;margin:0 auto;padding:4px 16px 16px}
+select,input,textarea,button{font:inherit;color:inherit}
+select,input[type=text],textarea{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px;width:100%}
+textarea{resize:vertical;min-height:64px}
+label{display:block;font-size:.88rem;color:var(--muted);margin:14px 0 5px}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.btn{background:var(--acc);color:var(--accink);border:0;border-radius:10px;padding:12px 16px;font-weight:600;cursor:pointer;min-height:44px}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.btn.sm{padding:8px 12px;font-size:.9rem;min-height:44px}
+.btn:disabled{opacity:.5}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.muted{color:var(--muted);font-size:.9rem}
+.chip{border:1px solid var(--line);background:var(--card);border-radius:99px;padding:8px 14px;font-size:.92rem}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin:10px 0}
+.big{font:600 2.2rem var(--serif)}
+.word{font:600 1.7rem var(--serif);margin:4px 0}
+h2{font:600 1.2rem var(--serif);margin:14px 0 4px}
+.item{display:flex;justify-content:space-between;gap:10px;padding:12px 0;border-bottom:1px solid var(--line);cursor:pointer}
+.item b{font-family:var(--serif);font-size:1.1rem}
+.fb{padding:12px;border-radius:10px;margin:10px 0;background:var(--soft)}
+.fb.good{background:var(--good)}.fb.bad{background:var(--bad)}
+.grid{display:grid;grid-template-columns:1fr;gap:0 12px}
+nav{position:fixed;bottom:0;left:0;right:0;background:var(--card);border-top:1px solid var(--line);display:flex;padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;background:none;border:0;padding:14px 4px;color:var(--muted);font-weight:600;cursor:pointer}
+nav button.on{color:var(--acc);box-shadow:inset 0 3px 0 var(--acc)}
+#toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:99px;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90%}
+#toast.show{opacity:1}
+@media (min-width:900px){header,main{max-width:860px}.grid{grid-template-columns:1fr 1fr}.grid .wide{grid-column:1/3}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style></head><body>
+<header><h1>Wordhoard</h1><button class="btn ghost sm" id="th">Light / dark</button></header>
+<main id="m"></main><nav id="nv"></nav><div id="toast" role="status"></div>
+<script>
+/* ===== Data model (schema 1) =====
+ db = {schema, app, words[], usage_reports[], posts[]}
+ word = {id, scots, english, pos, respelling, example_scots, example_english,
+         variants[], region, notes, source, status, audio, tags[], created, updated}
+ usage_reports and posts are reserved for future social/crowd features. */
+const K='wh_db',F=['scots','english','pos','respelling','example_scots','example_english','variants','region','notes','source'];
+const COLS=['id','status',...F],POS=['n','v','adj','adv','prep','pron','conj','interj','phr'],ST=['unverified','community','verified'];
+const SEED=`bairn|n|child
+wean|n|child (West of Scotland)
+ken|v|know
+dinnae|v|do not
+cannae|v|cannot
+isnae|v|is not
+wasnae|v|was not
+hame|n|home
+braw|adj|fine, good, handsome
+bonnie|adj|pretty, attractive
+wee|adj|small
+muckle|adj|big, large
+dreich|adj|dreary, dull and wet
+glaikit|adj|foolish, vacant
+canny|adj|careful, shrewd
+couthy|adj|pleasant, homely
+crabbit|adj|bad-tempered
+fash|v|worry, bother
+greet|v|cry, weep
+blether|v|chatter
+bide|v|stay, live
+gie|v|give
+gaun|v|going
+aye|adv|yes
+nae|adv|no, not
+naw|interj|no
+och|interj|oh (expression of regret or surprise)
+lassie|n|girl
+laddie|n|boy
+loon|n|boy (Doric)
+quine|n|girl (Doric)
+kirk|n|church
+burn|n|stream
+brae|n|hillside, slope
+glen|n|narrow valley
+loch|n|lake
+firth|n|estuary
+bothy|n|simple hut or shelter
+byre|n|cowshed
+croft|n|small tenant farm
+neep|n|turnip
+tattie|n|potato
+bannock|n|flat round bread
+dram|n|small measure of whisky
+piece|n|sandwich
+messages|n|shopping, errands
+sleekit|adj|sly, cunning
+thrawn|adj|stubborn, awkward
+scunner|n|disgust, strong dislike
+stoater|n|excellent person or thing
+skelp|v|slap, smack
+stushie|n|fuss, uproar
+stramash|n|commotion
+shoogle|v|shake
+shoogly|adj|wobbly
+clype|v|tell tales
+clatty|adj|dirty
+drookit|adj|soaked
+fankle|n|tangle
+gallus|adj|bold, cheeky
+haver|v|talk nonsense
+hoose|n|house
+hunner|n|hundred
+keek|v|peek
+lum|n|chimney
+mither|n|mother
+faither|n|father
+neb|n|nose
+numpty|n|fool
+oxter|n|armpit
+peely-wally|adj|pale, unwell-looking
+rammy|n|brawl
+scunnered|adj|fed up
+smirr|n|fine drizzle
+spurtle|n|stick for stirring porridge
+stookie|n|plaster cast
+stour|n|dust
+swither|v|hesitate
+tak|v|take
+tae|prep|to
+thole|v|endure
+toun|n|town
+wabbit|adj|exhausted
+wheesht|interj|be quiet
+whit|pron|what
+yin|n|one
+lang|adj|long
+auld|adj|old
+nicht|n|night
+licht|n|light
+mou|n|mouth
+heid|n|head
+hert|n|heart
+haund|n|hand
+gey|adv|very, rather
+fou|adj|drunk
+forby|prep|besides
+aboot|prep|about
+doon|adv|down
+oot|adv|out
+richt|adj|right, correct
+wifie|n|woman
+bogle|n|ghost
+cuddy|n|donkey
+dug|n|dog
+coo|n|cow
+craw|n|crow
+doo|n|pigeon
+wynd|n|narrow lane
+kist|n|chest
+press|n|cupboard
+ashet|n|large serving plate
+tablet|n|hard crumbly sweet`;
+const $=s=>document.querySelector(s),esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const uid=()=>'w_'+Date.now().toString(36)+Math.random().toString(36).slice(2,7),now=()=>new Date().toISOString();
+const vs=x=>Array.isArray(x)?x:String(x||'').split(/[,;]/).map(s=>s.trim()).filter(Boolean);
+const mk=(o={})=>{const t=now();return Object.assign({id:uid(),scots:'',english:'',pos:'',respelling:'',example_scots:'',example_english:'',variants:[],region:'',notes:'',source:'',status:'unverified',audio:'',tags:[],created:t,updated:t},o,{id:o.id||uid()})};
+function clean(o){const r={};[...COLS].forEach(k=>{if(o[k]==null)return;if(k==='variants')r[k]=vs(o[k]).map(cl);else r[k]=cl(o[k])});if(!r.id)delete r.id;if(r.status&&!ST.includes(r.status))r.status='unverified';return r}
+const cl=s=>String(s).replace(/[\u2019\u2018]/g,"'").replace(/[\u201c\u201d]/g,'"').replace(/\s+/g,' ').trim();
+let db;try{db=JSON.parse(localStorage.getItem(K))}catch(e){}
+if(!db||!Array.isArray(db.words))db={schema:1,app:'wordhoard',words:SEED.split('\n').map(l=>{const[s,p,e]=l.split('|');return mk({scots:s,pos:p,english:e,source:'starter set (unchecked)'})}),usage_reports:[],posts:[]};
+const save=()=>{db.updated=now();try{localStorage.setItem(K,JSON.stringify(db))}catch(e){toast('Could not save in this browser. Export a backup now.')}};
+let tt;function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('show');clearTimeout(tt);tt=setTimeout(()=>e.classList.remove('show'),2600)}
+
+/* ===== Self check ===== */
+function chk(w,all){const r=[],L=s=>String(s).trim().toLowerCase();
+ if(!w.scots)r.push(['bad','Scots word is empty.']);
+ if(!w.english)r.push(['bad','English meaning is empty.']);
+ if(/[0-9_@#$%^&*=+<>{}\[\]\\\/|~]/.test(w.scots))r.push(['warn','Unusual characters in the Scots word. Check for typos.']);
+ if(w.pos&&!POS.includes(w.pos))r.push(['warn','Part of speech "'+w.pos+'" is not in the list ('+POS.join(', ')+').']);
+ if(!w.pos)r.push(['info','No part of speech.']);
+ if(w.scots&&L(w.scots)===L(w.english))r.push(['warn','Scots and English are identical. Is this really a Scots word?']);
+ const f=[w.scots,...vs(w.variants)].map(L).filter(Boolean);
+ all.forEach(o=>{if(o.id===w.id)return;const g=[o.scots,...vs(o.variants)].map(L);if(f.some(x=>g.includes(x)))r.push(['warn','Same spelling as "'+o.scots+'". Duplicate or a variant?'])});
+ if(w.example_scots&&!f.some(x=>L(w.example_scots).includes(x)))r.push(['info','Example does not contain the word or a listed variant.']);
+ if(w.example_scots&&!w.example_english)r.push(['info','Example has no English translation.']);
+ if(String(w.english).length>100)r.push(['info','Meaning is very long. Consider shortening.']);
+ if(/^[A-Z]/.test(w.scots)&&w.scots.length>1&&w.scots===w.scots.toUpperCase())r.push(['info','Word is all capitals.']);
+ return r}
+const fbs=r=>r.map(x=>`<div class="fb ${x[0]==='bad'?'bad':''}">${esc(x[1])}</div>`).join('');
+
+/* ===== Parsing ===== */
+function cells(l,d){const o=[];let c='',q=false;for(let i=0;i<l.length;i++){const h=l[i];if(h=='"'){if(q&&l[i+1]=='"'){c+='"';i++}else q=!q}else if(h===d&&!q){o.push(c);c=''}else c+=h}o.push(c);return o}
+function parse(t){t=t.trim();if(!t)return[];
+ if(/^[\[{]/.test(t)){const j=JSON.parse(t);return(Array.isArray(j)?j:j.words||[]).map(o=>mk(clean(o)))}
+ const first=t.split('\n')[0],d=first.includes('\t')?'\t':first.includes('|')?'|':',';
+ const rows=t.split(/\r?\n/).filter(l=>l.trim()).map(l=>cells(l,d));let cols=F;
+ if(/^(scots|id)$/i.test(rows[0][0].trim()))cols=rows.shift().map(c=>c.trim().toLowerCase());
+ return rows.map(r=>{const o={};cols.forEach((c,i)=>{if(COLS.includes(c))o[c]=r[i]||''});return mk(clean(o))})}
+
+/* ===== State and views ===== */
+let v='words',q='',sf='all',eid=null,pend=null,mode='skip';
+const NAV=[['words','Words'],['add','Add'],['imp','Import'],['chk','Check'],['data','Data']];
+function render(){$('#nv').innerHTML=NAV.map(n=>`<button class="${v===n[0]?'on':''}" data-nav="${n[0]}">${n[1]}</button>`).join('');({words:vWords,add:vAdd,imp:vImp,chk:vChk,data:vData})[v]();scrollTo(0,0)}
+const go=x=>{v=x;render()};
+const flagOf=w=>chk(w,db.words).some(x=>x[0]!=='info')?'⚠':'';
+
+function vWords(){$('#m').innerHTML=`<div class="row"><input type="text" id="q" placeholder="Search Scots or English" value="${esc(q)}" style="flex:1;min-width:180px"><select id="sf" style="width:auto"><option value="all">All</option>${ST.map(s=>`<option ${sf===s?'selected':''}>${s}</option>`).join('')}</select></div><p class="muted" id="cnt"></p><div id="lst"></div>`;fill()}
+function fill(){const t=q.toLowerCase(),L=db.words.filter(w=>(sf==='all'||w.status===sf)&&(!t||[w.scots,w.english,...w.variants].join(' ').toLowerCase().includes(t))).sort((a,b)=>a.scots.localeCompare(b.scots,'en'));
+ $('#cnt').textContent=L.length+' of '+db.words.length+' words';
+ $('#lst').innerHTML=L.map(w=>`<div class="item" tabindex="0" data-edit="${w.id}"><span><b>${esc(w.scots)}</b> <span class="muted">${esc(w.pos)}</span><br><span class="muted">${esc(w.english)}</span></span><span class="muted">${w.status==='verified'?'✓ ':''}${flagOf(w)}</span></div>`).join('')||'<p class="muted">No words yet. Add one or import a list.</p>'}
+
+function vAdd(){const w=db.words.find(x=>x.id===eid)||mk();const i=(k,l,t)=>`<div><label for="f_${k}">${l}</label>${t==='ta'?`<textarea id="f_${k}">${esc(w[k])}</textarea>`:`<input type="text" id="f_${k}" value="${esc(k==='variants'?w.variants.join(', '):w[k])}">`}</div>`;
+ $('#m').innerHTML=`<h2>${eid?'Edit word':'Add a word'}</h2><div class="card"><div class="grid">${i('scots','Scots word')}${i('english','English meaning')}
+ <div><label for="f_pos">Part of speech</label><select id="f_pos"><option value=""></option>${POS.map(p=>`<option ${w.pos===p?'selected':''}>${p}</option>`).join('')}</select></div>${i('respelling','Respelling (how it sounds)')}
+ ${i('variants','Other spellings (comma separated)')}${i('region','Region')}${i('example_scots','Example sentence (Scots)')}${i('example_english','Example sentence (English)')}
+ ${i('source','Source')}<div><label for="f_status">Status</label><select id="f_status">${ST.map(p=>`<option ${w.status===p?'selected':''}>${p}</option>`).join('')}</select></div><div class="wide">${i('notes','Notes','ta')}</div></div>
+ <div class="row" style="margin-top:14px"><button class="btn" data-act="save">Save word</button>${eid?'<button class="btn ghost" data-act="del">Delete</button><button class="btn ghost" data-act="new">Cancel</button>':''}</div></div><div id="res"></div>`}
+function doSave(){const o={};F.forEach(k=>o[k]=$('#f_'+k).value);o.status=$('#f_status').value;o.pos=$('#f_pos').value;
+ const old=db.words.find(x=>x.id===eid),w=old?Object.assign(old,clean(o),{updated:now()}):mk(clean(o));
+ const bad=chk(w,db.words).filter(x=>x[0]==='bad');if(bad.length){$('#res').innerHTML=fbs(bad);return}
+ if(!old)db.words.push(w);save();const r=chk(w,db.words);eid=null;vAdd();$('#res').innerHTML='<div class="fb good">Saved "'+esc(w.scots)+'".</div>'+fbs(r)}
+
+function vImp(){$('#m').innerHTML=`<h2>Import words</h2><div class="card"><p class="muted">Paste one entry per line, or choose a file (.csv, .txt, .json). Columns, in order: ${F.join(', ')}. Separate with commas, tabs or |. A header row starting with "scots" lets you use any column order. Only the first two columns are needed.</p>
+ <label for="paste">Paste entries</label><textarea id="paste" rows="7" placeholder="dreich|adj|dreary, dull and wet"></textarea>
+ <label for="file">Or choose a file</label><input type="file" id="file" accept=".csv,.txt,.tsv,.json">
+ <label for="mode">If a word already exists</label><select id="mode"><option value="skip">Skip it</option><option value="update" ${mode==='update'?'selected':''}>Update it with the new details</option></select>
+ <div class="row" style="margin-top:14px"><button class="btn" data-act="prev">Preview</button></div></div><div id="pv"></div>`;if(pend)showPrev()}
+function dupOf(w,pool){const f=[w.scots,...vs(w.variants)].map(s=>s.toLowerCase());return pool.find(o=>o.id===w.id||[o.scots,...vs(o.variants)].some(s=>f.includes(s.toLowerCase())))}
+function doPrev(txt){try{pend=parse(txt)}catch(e){$('#pv').innerHTML='<div class="fb bad">Could not read this. If it is JSON, check it is complete. Otherwise check each line has a word and a meaning.</div>';return}
+ if(!pend.length){$('#pv').innerHTML='<div class="fb">Nothing to import yet. Paste some entries first.</div>';return}showPrev()}
+function showPrev(){mode=$('#mode')?$('#mode').value:mode;let n=0,d=0;const seen=[];
+ const rows=pend.map(w=>{const ex=dupOf(w,db.words)||dupOf(w,seen),dup=!!ex;seen.push(w);dup?d++:n++;const r=chk(w,[...db.words,...seen.slice(0,-1)]).filter(x=>x[0]!=='info'||0);
+ return`<div class="item" style="cursor:default"><span><b>${esc(w.scots)}</b> <span class="muted">${esc(w.pos)} ${esc(w.english)}</span>${r.map(x=>`<br><span class="muted">${x[0]==='bad'?'✗':'⚠'} ${esc(x[1])}</span>`).join('')}</span><span class="muted">${dup?'exists':'new'}</span></div>`}).join('');
+ $('#pv').innerHTML=`<div class="card"><b>${n} new, ${d} already in the list</b>${rows}<div class="row" style="margin-top:14px"><button class="btn" data-act="commit">Add to list</button><button class="btn ghost" data-act="cancelp">Cancel</button></div></div>`}
+function doCommit(){let a=0,u=0;pend.forEach(w=>{if(!w.scots||!w.english)return;const ex=dupOf(w,db.words);if(ex){if(mode==='update'){const c=clean(w);Object.keys(c).forEach(k=>{if(k!=='id'&&c[k]!==''&&!(Array.isArray(c[k])&&!c[k].length))ex[k]=c[k]});ex.updated=now();u++}}else{db.words.push(w);a++}});
+ pend=null;save();toast(a+' added, '+u+' updated');go('words')}
+
+function vChk(){const all=db.words,out=[];let b=0,w2=0,inf=0;all.forEach(w=>{const r=chk(w,all);r.forEach(x=>x[0]==='bad'?b++:x[0]==='warn'?w2++:inf++);if(r.some(x=>x[0]!=='info'))out.push([w,r])});
+ $('#m').innerHTML=`<h2>Self check</h2><div class="fb ${b?'bad':'good'}">${all.length} words checked: ${b} errors, ${w2} warnings, ${inf} suggestions.</div><p class="muted">Errors and warnings are listed below. Tap a word to fix it. Suggestions (missing part of speech, examples) show when you edit a word.</p>`+
+ (out.map(([w,r])=>`<div class="item" tabindex="0" data-edit="${w.id}"><span><b>${esc(w.scots)}</b><br>${r.filter(x=>x[0]!=='info').map(x=>`<span class="muted">${esc(x[1])}</span>`).join('<br>')}</span></div>`).join('')||'<p class="muted">Nothing to fix. Remember that this only catches obvious slips. Spelling still needs checking against DSL.</p>')}
+
+function vData(){const c=s=>db.words.filter(w=>w.status===s).length;
+ $('#m').innerHTML=`<h2>Data and backup</h2><div class="card"><p>${db.words.length} words: ${c('verified')} verified, ${c('community')} community, ${c('unverified')} unverified.</p><p class="muted">Words are stored in this browser only. Export a backup often. The JSON file is the full database; the quiz app will load it.</p>
+ <div class="row"><button class="btn" data-act="xj">Export JSON</button><button class="btn ghost" data-act="xc">Export CSV</button></div>
+ <label for="rest">Restore from a JSON backup (replaces everything)</label><input type="file" id="rest" accept=".json">
+ <div class="row" style="margin-top:14px"><button class="btn ghost" data-act="reset">Reset to starter list</button></div></div>`}
+function dl(n,t,m){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:m}));a.download=n;a.click()}
+const q2=s=>'"'+String(s).replace(/"/g,'""')+'"';
+
+/* ===== Events ===== */
+document.addEventListener('click',e=>{const t=e.target.closest('[data-nav],[data-edit],[data-act]');if(!t)return;const d=t.dataset;
+ if(d.nav){eid=null;go(d.nav)}else if(d.edit){eid=d.edit;go('add')}else{const a=d.act;
+ if(a==='save')doSave();else if(a==='new'){eid=null;go('words')}
+ else if(a==='del'){if(confirm('Delete this word? Export a backup first if unsure.')){db.words=db.words.filter(x=>x.id!==eid);eid=null;save();toast('Deleted');go('words')}}
+ else if(a==='prev'){const f=$('#file').files[0];mode=$('#mode').value;if(f){const r=new FileReader();r.onload=()=>doPrev(r.result);r.readAsText(f)}else doPrev($('#paste').value)}
+ else if(a==='commit')doCommit();else if(a==='cancelp'){pend=null;vImp()}
+ else if(a==='xj')dl('wordhoard-'+now().slice(0,10)+'.json',JSON.stringify(db,null,1),'application/json');
+ else if(a==='xc')dl('wordhoard-'+now().slice(0,10)+'.csv',[COLS.join(','),...db.words.map(w=>COLS.map(k=>q2(k==='variants'?w.variants.join('; '):w[k])).join(','))].join('\n'),'text/csv');
+ else if(a==='reset'&&confirm('Replace everything with the starter list?')){localStorage.removeItem(K);location.reload()}}});
+document.addEventListener('input',e=>{if(e.target.id==='q'){q=e.target.value;fill()}});
+document.addEventListener('change',e=>{if(e.target.id==='sf'){sf=e.target.value;fill()}
+ if(e.target.id==='rest'){const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const j=JSON.parse(r.result);if(!Array.isArray(j.words))throw 0;if(!confirm('Replace all '+db.words.length+' current words with '+j.words.length+' from this backup?'))return;db=j;db.words=db.words.map(w=>mk(w));save();toast('Restored');go('words')}catch(x){toast('That file is not a Wordhoard backup.')}};r.readAsText(f)}});
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.dataset&&e.target.dataset.edit)e.target.click()});
+$('#th').onclick=()=>{const r=document.documentElement,dk=r.dataset.theme?r.dataset.theme==='dark':matchMedia('(prefers-color-scheme:dark)').matches,n=dk?'light':'dark';r.dataset.theme=n;try{localStorage.setItem('wh_theme',n)}catch(e){}};
+try{const t=localStorage.getItem('wh_theme');if(t)document.documentElement.dataset.theme=t}catch(e){}
+save();render();
+</script></body></html>
